@@ -64,8 +64,16 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
                 yolo_model_def = yolo_trt_filename
         yolo_class_path = ""
         yolo_weights_path = ""
+    elif yolo_version == 'v8':
+        # YOLOv8 comes in different sizes: n(ano), s(mall), m(edium), l(arge), x(large)
+        if use_tiny_yolo:
+            yolo_model_def = "yolov8n"  # nano – fastest
+        else:
+            yolo_model_def = "yolov8m"  # medium – good balance of speed/accuracy
+        yolo_class_path = ""
+        yolo_weights_path = ""
     else:
-        raise ValueError('Unsopported YOLO version.')
+        raise ValueError('Unsupported YOLO version. Choose v3, v5, or v8.')
 
     model = SimpleHRNet(
         hrnet_c,
@@ -185,7 +193,7 @@ if __name__ == '__main__':
                              "multiperson detection)",
                         action="store_true")
     parser.add_argument("--yolo_version",
-                        help="Use the specified version of YOLO. Supported versions: `v3` (default), `v5`.",
+                        help="Use the specified version of YOLO. Supported versions: `v3` (default), `v5`, `v8`.",
                         type=str, default="v3")
     parser.add_argument("--use_tiny_yolo",
                         help="Use YOLOv3-tiny in place of YOLOv3 (faster person detection) if `yolo_version` is `v3`."

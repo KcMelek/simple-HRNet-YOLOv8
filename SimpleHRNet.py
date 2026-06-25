@@ -62,13 +62,14 @@ class SimpleHRNet:
             max_batch_size (int): maximum batch size used in hrnet inference.
                 Useless without multiperson=True.
                 Default: 16
-            yolo_version (str): version of YOLO. Supported versions: `v3`, `v5`. Used when multiperson is True.
+            yolo_version (str): version of YOLO. Supported versions: `v3`, `v5`, `v8`. Used when multiperson is True.
                 Default: "v3"
             yolo_model_def (str): path to yolo model definition file. Recommended values:
                 - `./models_/detectors/yolo/config/yolov3.cfg` if yolo_version is 'v3'
                 - `./models_/detectors/yolo/config/yolov3-tiny.cfg` if yolo_version is 'v3', to use tiny yolo
                 - yolov5 model name if yolo_version is 'v5', e.g. `yolov5m` (medium), `yolov5n` (nano)
                 - `yolov5m.engine` if yolo_version is 'v5', custom version (e.g. tensorrt model)
+                - yolov8 model name if yolo_version is 'v8', e.g. `yolov8m` (medium), `yolov8n` (nano)
                 Default: "./models_/detectors/yolo/config/yolov3.cfg"
             yolo_class_path (str): path to yolov3 class definition file.
                 Default: "./models_/detectors/yolo/data/coco.names"
@@ -103,8 +104,10 @@ class SimpleHRNet:
                 from models_.detectors.YOLOv3 import YOLOv3
             elif self.yolo_version == 'v5':
                 from models_.detectors.YOLOv5 import YOLOv5
+            elif self.yolo_version == 'v8':
+                from models_.detectors.YOLOv8 import YOLOv8
             else:
-                raise ValueError('Unsopported YOLO version.')
+                raise ValueError('Unsupported YOLO version. Choose v3, v5, or v8.')
 
         if model_name in ('HRNet', 'hrnet'):
             self.model = HRNet(c=c, nof_joints=nof_joints)
@@ -160,8 +163,11 @@ class SimpleHRNet:
                                        classes=('person',),
                                        max_batch_size=self.max_batch_size,
                                        device=device)
-            else:
+            elif self.yolo_version == 'v5':
                 self.detector = YOLOv5(model_def=yolo_model_def,
+                                       device=device)
+            else:  # v8
+                self.detector = YOLOv8(model_def=yolo_model_def,
                                        device=device)
 
             self.transform = transforms.Compose([
