@@ -223,13 +223,25 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
         total_persons += num_persons
         max_persons = max(max_persons, num_persons)
 
-        for i, (pt, pid) in enumerate(zip(pts, person_ids)):
-            frame = draw_points_and_skeleton(frame, pt, joints_dict()[hrnet_joints_set]['skeleton'], person_index=pid,
-                                             points_color_palette='gist_rainbow', skeleton_color_palette='jet',
-                                             points_palette_samples=10)
+        if len(person_ids) > 0:
+            for box, pt, pid in zip(boxes, pts, person_ids):
+                frame = draw_points_and_skeleton(
+                    frame,
+                    pt,
+                    joints_dict()[hrnet_joints_set]['skeleton'],
+                    person_index=pid,
+                    points_color_palette='gist_rainbow',
+                    skeleton_color_palette='jet',
+                    points_palette_samples=10
+                )
 
-        # for box in boxes:
-        #     cv2.rectangle(frame,(box[0],box[1]),(box[2],box[3]),(255,255,255),2)
+                x1, y1, x2, y2 = box.astype(int)
+
+                color = ((pid * 37) % 255, (pid * 17) % 255, (pid * 29) % 255)
+
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(frame, f"ID {pid}", (x1, y1 - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         print(
             f"Pipeline FPS: {pipeline_fps:.2f} | "
