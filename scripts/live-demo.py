@@ -224,24 +224,49 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
         max_persons = max(max_persons, num_persons)
 
         if len(person_ids) > 0:
-            for box, pt, pid in zip(boxes, pts, person_ids):
-                frame = draw_points_and_skeleton(
-                    frame,
-                    pt,
-                    joints_dict()[hrnet_joints_set]['skeleton'],
-                    person_index=pid,
-                    points_color_palette='gist_rainbow',
-                    skeleton_color_palette='jet',
-                    points_palette_samples=10
-                )
+    for box, pt, pid in zip(boxes, pts, person_ids):
 
-                x1, y1, x2, y2 = box.astype(int)
+        frame = draw_points_and_skeleton(
+            frame,
+            pt,
+            joints_dict()[hrnet_joints_set]['skeleton'],
+            person_index=int(pid),
+            points_color_palette='gist_rainbow',
+            skeleton_color_palette='jet',
+            points_palette_samples=10
+        )
 
-                color = ((pid * 37) % 255, (pid * 17) % 255, (pid * 29) % 255)
+        # -------------------------
+        # SAFE BOX FORMAT FIX
+        # -------------------------
+        box = np.asarray(box).reshape(-1)
 
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, f"ID {pid}", (x1, y1 - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+        if box.shape[0] != 4:
+            continue  # skip bad boxes safely
+
+        x1, y1, x2, y2 = map(int, box)
+
+        # -------------------------
+        # SAFE COLOR FIX
+        # -------------------------
+        pid_int = int(pid)
+        color = (
+            int(pid_int * 37) % 255,
+            int(pid_int * 17) % 255,
+            int(pid_int * 29) % 255
+        )
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+        cv2.putText(
+            frame,
+            f"ID {pid_int}",
+            (x1, max(0, y1 - 5)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2
+        )
 
         print(
             f"Pipeline FPS: {pipeline_fps:.2f} | "
