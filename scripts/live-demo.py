@@ -12,10 +12,11 @@ sys.path.insert(1, os.getcwd())
 from SimpleHRNet import SimpleHRNet
 from misc.visualization import draw_points, draw_skeleton, draw_points_and_skeleton, joints_dict, check_video_rotation
 from misc.utils import find_person_id_associations
+from misc.bytetrack import ByteTracker
 
 
 def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_joints_set, image_resolution,
-         single_person, yolo_version, use_tiny_yolo, disable_tracking, max_batch_size, disable_vidgear, save_video,
+         single_person, yolo_version, use_tiny_yolo, disable_tracking, use_bytetrack, max_batch_size, disable_vidgear, save_video,
          video_format, video_framerate, device, enable_tensorrt):
     if device is not None:
         device = torch.device(device)
@@ -93,10 +94,20 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
     )
 
     if not disable_tracking:
-        prev_boxes = None
-        prev_pts = None
-        prev_person_ids = None
-        next_person_id = 0
+        if use_bytetrack:
+            tracker = ByteTracker(
+                track_thresh=0.45,
+                match_thresh=0.8,
+                low_match_thresh=0.5,
+                max_time_lost=30,
+                min_hits=3,
+                smoothing_alpha=0.1,
+            )
+        else:
+            prev_boxes = None
+            prev_pts = None
+            prev_person_ids = None
+            next_person_id = 0
     t_start = time.time()
     while True:
         t = time.time()
@@ -120,22 +131,28 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
             boxes, pts = pts
 
         if not disable_tracking:
-            if len(pts) > 0:
-                if prev_pts is None and prev_person_ids is None:
-                    person_ids = np.arange(next_person_id, len(pts) + next_person_id, dtype=np.int32)
-                    next_person_id = len(pts) + 1
+            if use_bytetrack:
+                if len(pts) > 0:
+                    boxes, pts, person_ids = tracker.update(boxes, pts)
                 else:
-                    boxes, pts, person_ids = find_person_id_associations(
-                        boxes=boxes, pts=pts, prev_boxes=prev_boxes, prev_pts=prev_pts, prev_person_ids=prev_person_ids,
-                        next_person_id=next_person_id, pose_alpha=0.2, similarity_threshold=0.4, smoothing_alpha=0.1,
-                    )
-                    next_person_id = max(next_person_id, np.max(person_ids) + 1)
+                    person_ids = np.array((), dtype=np.int32)
             else:
-                person_ids = np.array((), dtype=np.int32)
+                if len(pts) > 0:
+                    if prev_pts is None and prev_person_ids is None:
+                        person_ids = np.arange(next_person_id, len(pts) + next_person_id, dtype=np.int32)
+                        next_person_id = len(pts) + 1
+                    else:
+                        boxes, pts, person_ids = find_person_id_associations(
+                            boxes=boxes, pts=pts, prev_boxes=prev_boxes, prev_pts=prev_pts, prev_person_ids=prev_person_ids,
+                            next_person_id=next_person_id, pose_alpha=0.2, similarity_threshold=0.4, smoothing_alpha=0.1,
+                        )
+                        next_person_id = max(next_person_id, np.max(person_ids) + 1)
+                else:
+                    person_ids = np.array((), dtype=np.int32)
 
-            prev_boxes = boxes.copy()
-            prev_pts = pts.copy()
-            prev_person_ids = person_ids
+                prev_boxes = boxes.copy()
+                prev_pts = pts.copy()
+                prev_person_ids = person_ids
 
         else:
             person_ids = np.arange(len(pts), dtype=np.int32)
@@ -200,9 +217,13 @@ if __name__ == '__main__':
                              "Use YOLOv5n(ano) in place of YOLOv5m(edium) if `yolo_version` is `v5`."
                              "Ignored if --single_person",
                         action="store_true")
-    parser.add_argument("--disable_tracking",
-                        help="disable the skeleton tracking and temporal smoothing functionality",
-                        action="store_true")
+    parser.add_argument(\"--disable_tracking\",
+                        help=\"disable the skeleton tracking and temporal smoothing functionality\",
+                        action=\"store_true\")
+    parser.add_argument(\"--use_bytetrack\",
+                        help=\"use ByteTrack for multi-person tracking (better than the default IoU tracker, \"
+                             \"especially under occlusion). Requires --yolo_version v8 or v5 (conf scores needed).\",
+                        action=\"store_true\")
     parser.add_argument("--max_batch_size", help="maximum batch size used for inference", type=int, default=16)
     parser.add_argument("--disable_vidgear",
                         help="disable vidgear (which is used for slightly better realtime performance)",
