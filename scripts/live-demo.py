@@ -183,7 +183,7 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
         pipeline_fps = 1.0 / latency
 
         latencies.append(latency)
-        fps_values.append(fps)
+        fps_values.append(pipeline_fps)
 
         processed_frames += 1
 
