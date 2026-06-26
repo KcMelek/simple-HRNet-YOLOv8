@@ -109,14 +109,67 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
             prev_person_ids = None
             next_person_id = 0
     t_start = time.time()
+
+    # ================= Metrics =================
+    if filename is not None:
+        total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_fps = video.get(cv2.CAP_PROP_FPS)
+        video_duration = total_frames / video_fps if video_fps > 0 else 0
+    else:
+        total_frames = 0
+        video_fps = 0
+        video_duration = 0
+
+    processed_frames = 0
+
+    latencies = []
+    fps_values = []
+
+    total_persons = 0
+    max_persons = 0
+    # ===========================================
+
     while True:
         t = time.time()
 
         if filename is not None or disable_vidgear:
             ret, frame = video.read()
             if not ret:
-                t_end = time.time()
-                print("\n Total Time: ", t_end - t_start)
+                total_runtime = time.time() - t_start
+
+                avg_latency = np.mean(latencies) if latencies else 0
+                min_latency = np.min(latencies) if latencies else 0
+                max_latency = np.max(latencies) if latencies else 0
+
+                avg_fps = np.mean(fps_values) if fps_values else 0
+                min_fps = np.min(fps_values) if fps_values else 0
+                max_fps = np.max(fps_values) if fps_values else 0
+
+                avg_persons = total_persons / processed_frames if processed_frames else 0
+
+                print("\n" + "=" * 60)
+                print("PIPELINE PERFORMANCE")
+                print("=" * 60)
+                print(f"Video duration         : {video_duration:.2f} s")
+                print(f"Original video FPS     : {video_fps:.2f}")
+                print(f"Total video frames     : {total_frames}")
+                print("-" * 60)
+                print(f"Processed frames       : {processed_frames}")
+                print(f"Total runtime          : {total_runtime:.2f} s")
+                print("-" * 60)
+                print(f"Average FPS            : {avg_fps:.2f}")
+                print(f"Minimum FPS            : {min_fps:.2f}")
+                print(f"Maximum FPS            : {max_fps:.2f}")
+                print("-" * 60)
+                print(f"Average latency        : {avg_latency * 1000:.2f} ms")
+                print(f"Minimum latency        : {min_latency * 1000:.2f} ms")
+                print(f"Maximum latency        : {max_latency * 1000:.2f} ms")
+                print("-" * 60)
+                print(f"Average persons/frame  : {avg_persons:.2f}")
+                print(f"Maximum persons/frame  : {max_persons}")
+                print(f"Total detected persons : {total_persons}")
+                print("=" * 60)
+
                 break
             if rotation_code is not None:
                 frame = cv2.rotate(frame, rotation_code)
@@ -126,6 +179,13 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
                 break
 
         pts = model.predict(frame)
+        latency = time.time() - t
+        pipeline_fps = 1.0 / latency
+
+        latencies.append(latency)
+        fps_values.append(fps)
+
+        processed_frames += 1
 
         if not disable_tracking:
             boxes, pts = pts
@@ -150,12 +210,18 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
                 else:
                     person_ids = np.array((), dtype=np.int32)
 
-                prev_boxes = boxes.copy()
-                prev_pts = pts.copy()
-                prev_person_ids = person_ids
+                if not disable_tracking:
+                    prev_boxes = boxes.copy()
+                    prev_pts = pts.copy()
+                    prev_person_ids = person_ids
 
         else:
             person_ids = np.arange(len(pts), dtype=np.int32)
+            
+        num_persons = len(person_ids)
+
+        total_persons += num_persons
+        max_persons = max(max_persons, num_persons)
 
         for i, (pt, pid) in enumerate(zip(pts, person_ids)):
             frame = draw_points_and_skeleton(frame, pt, joints_dict()[hrnet_joints_set]['skeleton'], person_index=pid,
@@ -165,8 +231,12 @@ def main(camera_id, filename, hrnet_m, hrnet_c, hrnet_j, hrnet_weights, hrnet_jo
         # for box in boxes:
         #     cv2.rectangle(frame,(box[0],box[1]),(box[2],box[3]),(255,255,255),2)
 
-        fps = 1. / (time.time() - t)
-        print('\rframerate: %f fps, for %d person(s) ' % (fps,len(pts)), end='')
+        print(
+            f"Pipeline FPS: {pipeline_fps:.2f} | "
+            f"Latency: {latency * 1000:.1f} ms | "
+            f"Persons: {num_persons}",
+            end=""
+        )
 
         if has_display:
             cv2.imshow('frame.png', frame)
@@ -217,13 +287,12 @@ if __name__ == '__main__':
                              "Use YOLOv5n(ano) in place of YOLOv5m(edium) if `yolo_version` is `v5`."
                              "Ignored if --single_person",
                         action="store_true")
-    parser.add_argument(\"--disable_tracking\",
-                        help=\"disable the skeleton tracking and temporal smoothing functionality\",
-                        action=\"store_true\")
-    parser.add_argument(\"--use_bytetrack\",
-                        help=\"use ByteTrack for multi-person tracking (better than the default IoU tracker, \"
-                             \"especially under occlusion). Requires --yolo_version v8 or v5 (conf scores needed).\",
-                        action=\"store_true\")
+    parser.add_argument("--disable_tracking",
+                        help="disable the skeleton tracking and temporal smoothing functionality",
+                        action="store_true")
+    parser.add_argument("--use_bytetrack",
+                        help="use ByteTrack for multi-person tracking (better than the default IoU tracker especially under occlusion.",
+                        action="store_true")
     parser.add_argument("--max_batch_size", help="maximum batch size used for inference", type=int, default=16)
     parser.add_argument("--disable_vidgear",
                         help="disable vidgear (which is used for slightly better realtime performance)",
